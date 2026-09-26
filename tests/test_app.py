@@ -73,6 +73,16 @@ def test_approval_refuses_to_make_stock_negative(client):
     assert db.requests.find_one({"_id": request_id})["status"] == "Pending"
 
 
+def test_admin_rejection_leaves_inventory_unchanged(client):
+    _, db = client
+    web = login_as(client, db)
+    stock_id = db.blood_inventory.insert_one({"blood_group": "AB+", "units": 4}).inserted_id
+    request_id = db.requests.insert_one({"blood_group": "AB+", "units": 2, "status": "Pending"}).inserted_id
+    assert web.post(f"/reject_request/{request_id}").status_code == 302
+    assert db.requests.find_one({"_id": request_id})["status"] == "Rejected"
+    assert db.blood_inventory.find_one({"_id": stock_id})["units"] == 4
+
+
 def test_admin_hospital_crud_and_user_management(client):
     _, db = client
     web = login_as(client, db)
