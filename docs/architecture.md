@@ -14,7 +14,7 @@ Browser (Jinja templates, CSS, Bootstrap)
       Existing collections
 ```
 
-`app.py` remains the Flask entry point and owns the original user/admin route handlers. The `/health` endpoint is a separate blueprint in `routes/health_routes.py`. Authentication and legacy hash migration live in `services/auth_service.py`; stock review logic is in `services/inventory_service.py`; model orchestration is in `services/prediction_service.py`. `mongodb.py` creates clients, and optional non-unique indexes are created explicitly with `python -m database.ensure_indexes`. Jinja templates render the records. Existing collection names and data are retained.
+`app.py` remains the Flask entry point and app factory. User/admin HTTP handlers are registered from `routes/web_routes.py`; `/health` is a separate blueprint in `routes/health_routes.py`. Authentication and legacy hash migration live in `services/auth_service.py`; stock review logic is in `services/inventory_service.py`; model orchestration is in `services/prediction_service.py`. `mongodb.py` creates clients, and optional non-unique indexes are created explicitly with `python -m database.ensure_indexes`. Jinja templates render the records. Existing collection names and data are retained.
 
 ## Prediction demonstration
 

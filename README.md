@@ -24,13 +24,13 @@ Python 3.11+, Flask, Jinja, Bootstrap 5, PyMongo, MongoDB, pandas, NumPy, scikit
 ## Structure
 
 ```text
-app.py                  Flask app factory and application routes
+app.py                  Flask app factory and entry point
 config.py               Environment configuration
 mongodb.py              MongoDB client factory
 database/               Optional non-destructive index setup
 create_admin.py         Interactive administrator setup
 services/               Authentication, inventory, and prediction services
-routes/                 Health blueprint
+routes/                 User/admin route registration and health blueprint
 ai/                     Synthetic data, preprocessing, model training/prediction
 templates/              Responsive Jinja pages and shared partials
 static/css/              Application styling
@@ -38,7 +38,7 @@ tests/                   AI and Flask workflow tests
 docs/                    Architecture, database, and testing notes
 ```
 
-The existing `app.py` stays the Flask entry point. Route handlers remain together there to preserve the original entry point and avoid a broad routing rewrite; reusable authentication, stock-decision, and prediction logic lives in services. MongoDB creation is isolated in `mongodb.py`.
+The existing `app.py` stays the Flask entry point and app factory. HTTP handlers live in `routes/web_routes.py`; the health endpoint has its own blueprint. Reusable authentication, stock-decision, and prediction logic lives in services. MongoDB creation is isolated in `mongodb.py`.
 
 ## Setup
 
