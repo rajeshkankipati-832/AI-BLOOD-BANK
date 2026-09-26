@@ -21,6 +21,8 @@ def test_auth_and_user_request_isolation(client):
         "phone": "", "blood_group": "O+", "age": 25, "gender": "", "password": "strongpass1"})
     assert response.status_code == 302
     assert db.users.find_one({"email": "test@example.test"})["password"] != "strongpass1"
+    assert web.post("/signup", data={"fullname": "Another User", "email": "test@example.test",
+        "blood_group": "O+", "age": 25, "password": "strongpass2"}).status_code == 409
     assert web.post("/login", data={"email": "test@example.test", "password": "strongpass1"}).status_code == 302
     assert web.get("/inventory").status_code == 200
     assert web.post("/request_blood", data={"patient_name": "Patient", "blood_group": "O+",

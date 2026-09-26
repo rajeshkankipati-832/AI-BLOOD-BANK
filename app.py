@@ -105,6 +105,10 @@ def create_app(test_config=None, mongo_database=None):
             if data["blood_group"] not in Config.BLOOD_GROUPS or not 18 <= age <= 65:
                 flash("Choose a valid blood group and enter an age from 18 to 65.", "danger")
                 return render_template("signup.html", form=data), 400
+            data["email"] = data["email"].lower()
+            if users.find_one({"email": data["email"]}):
+                flash("That email is already registered.", "warning")
+                return render_template("signup.html", form=data), 409
             data.update(email=data["email"].lower(), age=age,
                         password=hash_password(password), role="user",
                         donor=bool(request.form.get("donor")), created_at=datetime.now(timezone.utc))
