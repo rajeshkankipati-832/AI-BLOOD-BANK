@@ -1,1 +1,26 @@
-{% extends 'base.html' %}{% block title %}Donor registration{% endblock %}{% block content %}<div class="form-card"><h1 class="h3">Donor registration</h1><p class="text-muted">Register your interest. Donation eligibility is determined by medical staff.</p><form method="post">{% include 'partials/csrf.html' %}<label class="form-label">Full name</label><input class="form-control" name="fullname" required value="{{ user.fullname if user else '' }}"><label class="form-label mt-3">Phone</label><input class="form-control" name="phone" value="{{ user.phone if user else '' }}"><label class="form-label mt-3">Blood group</label><select class="form-select" name="blood_group" required>{% for b in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}<option {% if user and user.blood_group==b %}selected{% endif %}>{{ b }}</option>{% endfor %}</select><label class="form-label mt-3">Age</label><input class="form-control" type="number" min="18" max="65" name="age" required value="{{ user.age if user else '' }}"><label class="form-label mt-3">Gender</label><input class="form-control" name="gender" value="{{ user.gender if user else '' }}"><button class="btn btn-danger mt-4">Save donor profile</button></form></div>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}Donor registration{% endblock %}
+{% block content %}
+<div class="form-card">
+  <h1 class="h3">Donor registration</h1>
+  <p class="text-muted">Register your interest. Donation eligibility is determined by medical staff.</p>
+  <form method="post">
+    {% include 'partials/csrf.html' %}
+    <label class="form-label" for="fullname">Full name</label><input class="form-control" id="fullname" name="fullname" required value="{{ user.fullname if user else '' }}">
+    <label class="form-label mt-3" for="phone">Phone</label><input class="form-control" id="phone" name="phone" value="{{ user.phone if user else '' }}">
+    <label class="form-label mt-3" for="blood_group">Blood group</label>
+    <select class="form-select" id="blood_group" name="blood_group" required>{% for b in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}<option value="{{ b }}" {% if user and user.blood_group==b %}selected{% endif %}>{{ b }}</option>{% endfor %}</select>
+    <label class="form-label mt-3" for="age">Age</label><input class="form-control" id="age" type="number" min="18" max="65" name="age" required value="{{ user.age if user else '' }}">
+    {% set current_gender = user.gender_option if user and user.gender_option else (user.gender if user and user.gender in ['Female', 'Male'] else ('Other' if user and user.gender else '')) %}
+    <label class="form-label mt-3" for="gender">Gender</label>
+    <select class="form-select" id="gender" name="gender" data-gender-choice required>
+      <option value="">Choose…</option>{% for choice in ['Female', 'Male', 'Other'] %}<option value="{{ choice }}" {% if current_gender==choice %}selected{% endif %}>{{ choice }}</option>{% endfor %}
+    </select>
+    <div class="mt-3" data-gender-other {% if current_gender!='Other' %}hidden{% endif %}>
+      <label class="form-label" for="gender_other">Please specify</label>
+      <input class="form-control" id="gender_other" name="gender_other" value="{{ user.gender_other if user and user.gender_other else (user.gender if user and current_gender=='Other' else '') }}" data-gender-other-input>
+    </div>
+    <button class="btn btn-danger mt-4">Save donor profile</button>
+  </form>
+</div>
+{% endblock %}

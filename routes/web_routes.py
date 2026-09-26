@@ -30,6 +30,10 @@ def register_web_routes(app, mongo_database, login_required, admin_required, oid
             data = {key: request.form.get(key, "").strip() for key in
                     ("fullname", "email", "phone", "blood_group", "gender")}
             password = request.form.get("password", "")
+            confirm_password = request.form.get("confirm_password", "")
+            gender_choice = data["gender"]
+            gender_other = request.form.get("gender_other", "").strip()
+            data["gender_other"] = gender_other
             try:
                 age = int(request.form.get("age", ""))
             except ValueError:
@@ -37,18 +41,28 @@ def register_web_routes(app, mongo_database, login_required, admin_required, oid
             if not data["fullname"] or "@" not in data["email"] or len(password) < 8:
                 flash("Enter your name and a valid email; password must have 8 or more characters.", "danger")
                 return render_template("signup.html", form=data), 400
+            if password != confirm_password:
+                flash("The password and confirmation do not match.", "danger")
+                return render_template("signup.html", form=data), 400
+            if gender_choice not in ("Female", "Male", "Other") or (gender_choice == "Other" and not gender_other):
+                flash("Choose Female, Male, or Other and enter a description for Other.", "danger")
+                return render_template("signup.html", form=data), 400
             if data["blood_group"] not in Config.BLOOD_GROUPS or not 18 <= age <= 65:
                 flash("Choose a valid blood group and enter an age from 18 to 65.", "danger")
                 return render_template("signup.html", form=data), 400
+            data["gender_option"] = gender_choice
+            data["gender_other"] = gender_other if gender_choice == "Other" else ""
             data["email"] = data["email"].lower()
             if users.find_one({"email": data["email"]}):
                 flash("That email is already registered.", "warning")
                 return render_template("signup.html", form=data), 409
-            data.update(email=data["email"].lower(), age=age,
-                        password=hash_password(password), role="user",
-                        donor=bool(request.form.get("donor")), created_at=datetime.now(timezone.utc))
+            user_data = dict(data)
+            user_data["gender"] = gender_other if gender_choice == "Other" else gender_choice
+            user_data.update(email=data["email"].lower(), age=age,
+                             password=hash_password(password), role="user",
+                             donor=bool(request.form.get("donor")), created_at=datetime.now(timezone.utc))
             try:
-                users.insert_one(data)
+                users.insert_one(user_data)
             except DuplicateKeyError:
                 flash("That email is already registered.", "warning")
                 return render_template("signup.html", form=data), 409
@@ -160,14 +174,20 @@ def register_web_routes(app, mongo_database, login_required, admin_required, oid
             except ValueError:
                 age = 0
             group = request.form.get("blood_group", "")
+            gender_choice = request.form.get("gender", "").strip()
+            gender_other = request.form.get("gender_other", "").strip()
             if group not in Config.BLOOD_GROUPS or not 18 <= age <= 65:
                 flash("Choose a valid blood group and enter an age from 18 to 65.", "danger")
+                return render_template("donate_blood.html", user=user), 400
+            if gender_choice not in ("Female", "Male", "Other") or (gender_choice == "Other" and not gender_other):
+                flash("Choose Female, Male, or Other and enter a description for Other.", "danger")
                 return render_template("donate_blood.html", user=user), 400
             users.update_one({"_id": ObjectId(session["user_id"])}, {"$set": {
                 "fullname": request.form.get("fullname", "").strip(),
                 "phone": request.form.get("phone", "").strip(), "blood_group": group, "age": age,
-                "gender": request.form.get("gender", ""), "donor": True,
-                "donor_registered_at": datetime.now(timezone.utc)}})
+                "gender": gender_other if gender_choice == "Other" else gender_choice,
+                "gender_option": gender_choice, "gender_other": gender_other if gender_choice == "Other" else "",
+                "donor": True, "donor_registered_at": datetime.now(timezone.utc)}})
             flash("Donor profile saved.", "success")
             return redirect(url_for("dashboard"))
         return render_template("donate_blood.html", user=user)

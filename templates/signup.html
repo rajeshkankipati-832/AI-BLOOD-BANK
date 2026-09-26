@@ -1,1 +1,38 @@
-{% extends 'base.html' %}{% block title %}Create account{% endblock %}{% block content %}<div class="form-card wide"><h1 class="h3">Create your account</h1><form method="post">{% include 'partials/csrf.html' %}<div class="row g-3"><div class="col-md-6"><label class="form-label">Full name</label><input class="form-control" name="fullname" required value="{{ form.fullname if form else '' }}"></div><div class="col-md-6"><label class="form-label">Email</label><input class="form-control" type="email" name="email" required value="{{ form.email if form else '' }}"></div><div class="col-md-6"><label class="form-label">Phone</label><input class="form-control" name="phone"></div><div class="col-md-6"><label class="form-label">Blood group</label><select class="form-select" name="blood_group" required><option value="">Choose…</option>{% for b in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}<option>{{ b }}</option>{% endfor %}</select></div><div class="col-md-4"><label class="form-label">Age</label><input class="form-control" type="number" min="18" max="65" name="age" required></div><div class="col-md-4"><label class="form-label">Gender</label><input class="form-control" name="gender"></div><div class="col-md-4"><label class="form-label">Password (8+ characters)</label><input class="form-control" type="password" name="password" minlength="8" required autocomplete="new-password"></div><div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="donor" id="donor"><label class="form-check-label" for="donor">I’m interested in donating blood</label></div></div><button class="btn btn-danger mt-4">Create account</button></form></div>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}Create account{% endblock %}
+{% block content %}
+<div class="form-card wide">
+  <h1 class="h3">Create your account</h1>
+  <form method="post" data-password-confirm>
+    {% include 'partials/csrf.html' %}
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label" for="fullname">Full name</label><input class="form-control" id="fullname" name="fullname" required value="{{ form.fullname if form else '' }}"></div>
+      <div class="col-md-6"><label class="form-label" for="email">Email</label><input class="form-control" id="email" type="email" name="email" required autocomplete="email" value="{{ form.email if form else '' }}"></div>
+      <div class="col-md-6"><label class="form-label" for="phone">Phone</label><input class="form-control" id="phone" name="phone" autocomplete="tel" value="{{ form.phone if form else '' }}"></div>
+      <div class="col-md-6"><label class="form-label" for="blood_group">Blood group</label><select class="form-select" id="blood_group" name="blood_group" required><option value="">Choose…</option>{% for b in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}<option value="{{ b }}" {% if form and form.blood_group==b %}selected{% endif %}>{{ b }}</option>{% endfor %}</select></div>
+      <div class="col-md-4"><label class="form-label" for="age">Age</label><input class="form-control" id="age" type="number" min="18" max="65" name="age" required value="{{ form.age if form else '' }}"></div>
+      <div class="col-md-4">
+        <label class="form-label" for="gender">Gender</label>
+        <select class="form-select" id="gender" name="gender" data-gender-choice required>
+          <option value="">Choose…</option>
+          {% for choice in ['Female', 'Male', 'Other'] %}<option value="{{ choice }}" {% if form and form.gender==choice %}selected{% endif %}>{{ choice }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4" data-gender-other {% if not form or form.gender!='Other' %}hidden{% endif %}>
+        <label class="form-label" for="gender_other">Please specify</label>
+        <input class="form-control" id="gender_other" name="gender_other" value="{{ form.gender_other if form else '' }}" data-gender-other-input>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="password">Password (8+ characters)</label>
+        <div class="input-group"><input class="form-control" id="password" type="password" name="password" minlength="8" required autocomplete="new-password"><button class="btn btn-outline-secondary" type="button" data-toggle-password="password" aria-label="Show password">👁</button></div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="confirm_password">Confirm password</label>
+        <div class="input-group"><input class="form-control" id="confirm_password" type="password" name="confirm_password" minlength="8" required autocomplete="new-password" data-confirm-password-input><button class="btn btn-outline-secondary" type="button" data-toggle-password="confirm_password" aria-label="Show confirmation password">👁</button></div>
+      </div>
+      <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="donor" id="donor"><label class="form-check-label" for="donor">I’m interested in donating blood</label></div>
+    </div>
+    <button class="btn btn-danger mt-4">Create account</button>
+  </form>
+</div>
+{% endblock %}
