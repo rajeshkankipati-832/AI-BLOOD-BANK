@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block title %}Edit inventory{% endblock %}{% block content %}<div class="form-card"><h1 class="h3">Edit blood stock</h1><form method="post">{% include 'partials/csrf.html' %}{% include 'partials/blood_fields.html' %}<button class="btn btn-danger mt-3">Save changes</button></form></div>{% endblock %}

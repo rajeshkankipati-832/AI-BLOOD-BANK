@@ -1,5 +1,8 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import check_password_hash, generate_password_hash
+import os
+import secrets
 
 app = Flask(__name__)
 
@@ -7,7 +10,7 @@ app = Flask(__name__)
 # CONFIGURATION
 # =========================================================
 
-app.secret_key = "AIBloodBank2026"
+app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///bloodbank.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -35,7 +38,7 @@ class User(db.Model):
 
     gender = db.Column(db.String(20))
 
-    password = db.Column(db.String(100))
+    password = db.Column(db.String(255))
 
     donor = db.Column(db.Boolean, default=False)
 
@@ -122,7 +125,7 @@ def signup():
             blood_group=blood_group,
             age=int(age),
             gender=gender,
-            password=password,
+            password=generate_password_hash(password),
             donor=donor
         )
 
@@ -148,12 +151,20 @@ def login():
 
         password = request.form["password"]
 
-        user = User.query.filter_by(
-            email=email,
-            password=password
-        ).first()
+        user = User.query.filter_by(email=email).first()
 
+        valid_password = False
         if user:
+            try:
+                valid_password = check_password_hash(user.password or "", password)
+            except ValueError:
+                valid_password = False
+            if not valid_password and user.password == password:
+                user.password = generate_password_hash(password)
+                db.session.commit()
+                valid_password = True
+
+        if user and valid_password:
 
             session["user"] = user.fullname
 
@@ -371,4 +382,4 @@ with app.app_context():
 
 if __name__ == "__main__":
 
-    app.run(debug=True)
+    app.run(debug=os.getenv("FLASK_DEBUG", "false").lower() == "true")

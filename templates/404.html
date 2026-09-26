@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block title %}Not found{% endblock %}{% block content %}<div class="text-center py-5"><h1 class="display-4">404</h1><p class="lead">That page or record could not be found.</p><a class="btn btn-danger" href="{{ url_for('dashboard') if session.get('user_id') else url_for('home') }}">Go back</a></div>{% endblock %}

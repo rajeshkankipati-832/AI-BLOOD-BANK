@@ -1,44 +1,29 @@
+"""Create an initial administrator using credentials supplied at runtime."""
+import getpass
+import os
+
 from pymongo import MongoClient
+from werkzeug.security import generate_password_hash
 
-# Connect to MongoDB
-client = MongoClient("mongodb://localhost:27017/")
 
-# Select database
-db = client["AI_Blood_Bank"]
+def main():
+    email = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    if not email:
+        email = input("Admin email: ").strip().lower()
+    password = os.getenv("ADMIN_PASSWORD") or getpass.getpass("Admin password (8+ characters): ")
+    if "@" not in email or len(password) < 8:
+        raise SystemExit("Provide a valid email and a password of at least 8 characters.")
+    uri = os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017")
+    database = os.getenv("MONGO_DB", "AI_Blood_Bank")
+    with MongoClient(uri, serverSelectionTimeoutMS=5000) as client:
+        users = client[database]["users"]
+        if users.find_one({"email": email}):
+            raise SystemExit("An account with that email already exists; no changes made.")
+        users.insert_one({"fullname": "AI Blood Bank Admin", "email": email,
+            "phone": "", "blood_group": "", "age": None, "gender": "",
+            "password": generate_password_hash(password), "donor": False, "role": "admin"})
+    print(f"Administrator account created for {email}.")
 
-# Select users collection
-users = db["users"]
 
-# Admin details
-admin_email = "admin@aibloodbank.com"
-admin_password = "admin123"
-
-# Check whether admin already exists
-existing_admin = users.find_one({"email": admin_email})
-
-if existing_admin:
-    print("Admin account already exists.")
-else:
-    admin = {
-        "fullname": "AI Blood Bank Admin",
-        "email": admin_email,
-        "phone": "9999999999",
-        "blood_group": "",
-        "age": 25,
-        "gender": "",
-        "password": admin_password,
-        "donor": False,
-        "role": "admin"
-    }
-
-    users.insert_one(admin)
-
-    print("==============================")
-    print("ADMIN ACCOUNT CREATED")
-    print("==============================")
-    print("Email:    admin@aibloodbank.com")
-    print("Password: admin123")
-    print("Role:     admin")
-    print("==============================")
-
-client.close()
+if __name__ == "__main__":
+    main()

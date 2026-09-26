@@ -1,0 +1,12 @@
+.env
+.venv/
+.deps/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+ai/model/*.joblib
+ai/data/*.csv
+instance/
+*.sqlite3
+*.zip
