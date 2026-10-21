@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block title %}Edit profile{% endblock %}
+{% block content %}
+<div class="form-card wide">
+  <h1 class="h3">Edit profile</h1>
+  <p class="text-muted">Update your profile picture, personal details, and donor information.</p>
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    {% if user.get('profile_picture') %}
+      <img
+        src="{{ url_for('static', filename='uploads/' + user.get('profile_picture')) }}"
+        alt="Profile picture"
+        class="rounded-circle border"
+        style="width:110px;height:110px;object-fit:cover;"
+      >
+    {% else %}
+      <div class="rounded-circle border bg-light d-flex align-items-center justify-content-center"
+           style="width:110px;height:110px;flex-shrink:0;">
+        <span class="text-muted small">No photo</span>
+      </div>
+    {% endif %}
+
+    <div>
+      <h2 class="h6 mb-2">Profile picture</h2>
+      <form method="post" action="{{ url_for('update_profile_picture') }}"
+            enctype="multipart/form-data">
+        {% include 'partials/csrf.html' %}
+        <input class="form-control mb-2" type="file" name="profile_picture"
+               accept=".jpg,.jpeg,.png,.webp" required>
+        <button class="btn btn-outline-danger btn-sm" type="submit">
+          Upload picture
+        </button>
+      </form>
+
+      {% if user.get('profile_picture') %}
+      <form method="post" action="{{ url_for('remove_profile_picture') }}"
+            class="mt-2"
+            onsubmit="return confirm('Remove your profile picture?');">
+        {% include 'partials/csrf.html' %}
+        <button class="btn btn-outline-secondary btn-sm" type="submit">
+          Remove picture
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <hr>
+
+  <form method="post" action="{{ url_for('profile') }}">
+    {% include 'partials/csrf.html' %}
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="profile-fullname">Full name</label>
+        <input class="form-control" id="profile-fullname" name="fullname"
+               required value="{{ user.get('fullname', '') }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label" for="profile-email">Email</label>
+        <input class="form-control" id="profile-email" type="email" name="email"
+               required value="{{ user.get('email', '') }}" autocomplete="email">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label" for="profile-phone">Phone</label>
+        <input class="form-control" id="profile-phone" name="phone" maxlength="30"
+               value="{{ user.get('phone', '') }}" autocomplete="tel">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label" for="profile-blood">Blood group</label>
+        <select class="form-select" id="profile-blood" name="blood_group" required>
+          <option value="">Choose…</option>
+          {% for b in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}
+          <option value="{{ b }}" {% if user.get('blood_group') == b %}selected{% endif %}>
+            {{ b }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" for="profile-age">Age</label>
+        <input class="form-control" id="profile-age" type="number"
+               min="18" max="65" name="age" required
+               value="{{ user.get('age', '') }}">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" for="profile-gender">Gender</label>
+        <input class="form-control" id="profile-gender" name="gender"
+               maxlength="40" value="{{ user.get('gender', '') }}">
+      </div>
+
+      <div class="col-md-4 d-flex align-items-end">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="donor"
+                 id="profile-donor" {% if user.get('donor') %}checked{% endif %}>
+          <label class="form-check-label" for="profile-donor">
+            I'm interested in donating blood
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-danger mt-4" type="submit">Save changes</button>
+    <a class="btn btn-outline-secondary mt-4"
+       href="{{ url_for('dashboard') }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

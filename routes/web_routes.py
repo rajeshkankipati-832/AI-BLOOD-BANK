@@ -1,7 +1,12 @@
 """Application HTTP routes; authentication and business rules use services."""
 from datetime import datetime, timezone
+import os
+from pathlib import Path
+from uuid import uuid4
 from urllib.parse import urlsplit
 
+from PIL import Image, UnidentifiedImageError
+from flask import current_app
 from bson import ObjectId
 from flask import abort, flash, redirect, render_template, request, session, url_for
 from pymongo.errors import DuplicateKeyError
@@ -24,51 +29,100 @@ def register_web_routes(app, mongo_database, login_required, admin_required, oid
     def home():
         return render_template("home.html")
 
+    
     @app.route("/signup", methods=["GET", "POST"])
     def signup():
         if request.method == "POST":
-            data = {key: request.form.get(key, "").strip() for key in
-                    ("fullname", "email", "phone", "blood_group", "gender")}
+            data = {
+                key: request.form.get(key, "").strip()
+                for key in (
+                    "fullname",
+                    "email",
+                    "phone",
+                    "blood_group",
+                    "gender",
+                )
+            }
+
             password = request.form.get("password", "")
             confirm_password = request.form.get("confirm_password", "")
-            gender_choice = data["gender"]
-            gender_other = request.form.get("gender_other", "").strip()
-            data["gender_other"] = gender_other
+
+            # Validate age
             try:
                 age = int(request.form.get("age", ""))
-            except ValueError:
+            except (ValueError, TypeError):
                 age = 0
-            if not data["fullname"] or "@" not in data["email"] or len(password) < 8:
-                flash("Enter your name and a valid email; password must have 8 or more characters.", "danger")
+
+            # Validate name, email, and password
+            if (
+                not data["fullname"]
+                or "@" not in data["email"]
+                or len(password) < 8
+            ):
+                flash(
+                    "Enter your name and a valid email; password must have at least 8 characters.",
+                    "danger",
+                )
                 return render_template("signup.html", form=data), 400
+
+            # Validate password confirmation
             if password != confirm_password:
-                flash("The password and confirmation do not match.", "danger")
+                flash(
+                    "The password and confirmation do not match.",
+                    "danger",
+                )
                 return render_template("signup.html", form=data), 400
-            if gender_choice not in ("Female", "Male", "Other") or (gender_choice == "Other" and not gender_other):
-                flash("Choose Female, Male, or Other and enter a description for Other.", "danger")
+
+            # Validate gender selection
+            if data["gender"] not in (
+                "Female",
+                "Male",
+                "Other",
+                "Prefer not to say",
+            ):
+                flash("Please choose a valid gender option.", "danger")
                 return render_template("signup.html", form=data), 400
-            if data["blood_group"] not in Config.BLOOD_GROUPS or not 18 <= age <= 65:
-                flash("Choose a valid blood group and enter an age from 18 to 65.", "danger")
+
+            # Validate blood group and age
+            if (
+                data["blood_group"] not in Config.BLOOD_GROUPS
+                or not 18 <= age <= 65
+            ):
+                flash(
+                    "Choose a valid blood group and enter an age from 18 to 65.",
+                    "danger",
+                )
                 return render_template("signup.html", form=data), 400
-            data["gender_option"] = gender_choice
-            data["gender_other"] = gender_other if gender_choice == "Other" else ""
+
+            # Normalize email
             data["email"] = data["email"].lower()
+
+            # Check whether the email is already registered
             if users.find_one({"email": data["email"]}):
                 flash("That email is already registered.", "warning")
                 return render_template("signup.html", form=data), 409
-            user_data = dict(data)
-            user_data["gender"] = gender_other if gender_choice == "Other" else gender_choice
-            user_data.update(email=data["email"].lower(), age=age,
-                             password=hash_password(password), role="user",
-                             donor=bool(request.form.get("donor")), created_at=datetime.now(timezone.utc))
+
+            # Prepare the user document
+            data.update(
+                age=age,
+                password=hash_password(password),
+                role="user",
+                donor=bool(request.form.get("donor")),
+                created_at=datetime.now(timezone.utc),
+            )
+
+            # Save the new user in MongoDB
             try:
-                users.insert_one(user_data)
+                users.insert_one(data)
             except DuplicateKeyError:
                 flash("That email is already registered.", "warning")
                 return render_template("signup.html", form=data), 409
-            flash("Account created. Please sign in.", "success")
+
+            flash("Account created successfully. Please sign in.", "success")
             return redirect(url_for("login"))
+
         return render_template("signup.html")
+
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -90,6 +144,195 @@ def register_web_routes(app, mongo_database, login_required, admin_required, oid
                 destination = url_for("dashboard")
             return redirect(destination)
         return render_template("login.html")
+
+
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    def forgot_password():
+        # LOCAL DEMO ONLY: show the temporary reset link on screen; no email is sent.
+        import hashlib
+        import secrets
+        from datetime import timedelta
+
+        demo_reset_link = None
+        if request.method == "POST":
+            email = request.form.get("email", "").strip().lower()
+            user = users.find_one({"email": email}) if email else None
+            if user:
+                token = secrets.token_urlsafe(32)
+                token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+                expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+                users.update_one({"_id": user["_id"]}, {"$set": {
+                    "reset_token_hash": token_hash,
+                    "reset_token_expires_at": expires_at,
+                }})
+                demo_reset_link = url_for("reset_password", token=token)
+            else:
+                flash("If that email belongs to an account, a reset link would be generated in this local demo.", "info")
+        return render_template("forgot_password.html", demo_reset_link=demo_reset_link)
+
+    @app.route("/reset-password/<token>", methods=["GET", "POST"])
+    def reset_password(token):
+        import hashlib
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        query = {
+            "reset_token_hash": token_hash,
+            "reset_token_expires_at": {"$gt": datetime.now(timezone.utc)},
+        }
+        user = users.find_one(query)
+        if not user:
+            flash("This reset link is invalid, expired, or already used. Generate a new demo link.", "danger")
+            return render_template("reset_password.html", token=token, valid_token=False), 400
+        if request.method == "POST":
+            password = request.form.get("password", "")
+            confirm = request.form.get("confirm_password", "")
+            if len(password) < 8:
+                flash("Password must contain at least 8 characters.", "danger")
+            elif password != confirm:
+                flash("The passwords do not match.", "danger")
+            else:
+                users.update_one({"_id": user["_id"], "reset_token_hash": token_hash}, {
+                    "$set": {"password": hash_password(password)},
+                    "$unset": {"reset_token_hash": "", "reset_token_expires_at": ""},
+                })
+                flash("Password updated. Please sign in with your new password.", "success")
+                return redirect(url_for("login"))
+        return render_template("reset_password.html", token=token, valid_token=True)
+
+    @app.route("/profile", methods=["GET", "POST"])
+    @login_required
+    def profile():
+        user = current_user()
+        if not user:
+            session.clear()
+            flash("Please sign in again.", "warning")
+            return redirect(url_for("login"))
+
+        if request.method == "POST":
+            fullname = request.form.get("fullname", "").strip()
+            email = request.form.get("email", "").strip().lower()
+            phone = request.form.get("phone", "").strip()
+            blood_group = request.form.get("blood_group", "").strip()
+            gender = request.form.get("gender", "").strip()
+            try:
+                age = int(request.form.get("age", ""))
+            except (TypeError, ValueError):
+                age = 0
+            donor = request.form.get("donor") == "on"
+            values = {**user, "fullname": fullname, "email": email, "phone": phone,
+                      "blood_group": blood_group, "gender": gender, "age": age, "donor": donor}
+
+            if not fullname or "@" not in email or len(email) > 254:
+                flash("Enter your full name and a valid email address.", "danger")
+                return render_template("profile.html", user=values), 400
+            if blood_group not in Config.BLOOD_GROUPS or not 18 <= age <= 65:
+                flash("Choose a valid blood group and enter an age from 18 to 65.", "danger")
+                return render_template("profile.html", user=values), 400
+            if len(phone) > 30 or len(gender) > 40:
+                flash("Phone or gender field is too long.", "danger")
+                return render_template("profile.html", user=values), 400
+            if users.find_one({"email": email, "_id": {"$ne": user["_id"]}}):
+                flash("That email address is already used by another account.", "warning")
+                return render_template("profile.html", user=values), 409
+
+            users.update_one({"_id": user["_id"]}, {"$set": {
+                "fullname": fullname, "email": email, "phone": phone,
+                "blood_group": blood_group, "age": age, "gender": gender, "donor": donor,
+            }})
+            session["user"] = fullname
+            flash("Your profile has been updated.", "success")
+            return redirect(url_for("profile"))
+        return render_template("profile.html", user=user)
+    @app.post("/profile/picture")
+    @login_required
+    def update_profile_picture():
+        user = current_user()
+        if not user:
+            session.clear()
+            flash("Please sign in again.", "warning")
+            return redirect(url_for("login"))
+
+        uploaded = request.files.get("profile_picture")
+        if not uploaded or not uploaded.filename:
+            flash("Choose a picture to upload.", "warning")
+            return redirect(url_for("profile"))
+
+        # Limit uploads to 5 MB.
+        uploaded.stream.seek(0, os.SEEK_END)
+        file_size = uploaded.stream.tell()
+        uploaded.stream.seek(0)
+
+        if file_size > 5 * 1024 * 1024:
+            flash("The picture must be 5 MB or smaller.", "danger")
+            return redirect(url_for("profile"))
+
+        try:
+            image = Image.open(uploaded.stream)
+            if image.format not in ("JPEG", "PNG", "WEBP"):
+                raise ValueError("Unsupported image format.")
+            image.verify()
+
+            uploaded.stream.seek(0)
+            image = Image.open(uploaded.stream)
+            image.load()
+        except (UnidentifiedImageError, OSError, ValueError):
+            flash("Upload a valid JPG, PNG, or WebP image.", "danger")
+            return redirect(url_for("profile"))
+
+        upload_dir = Path(current_app.root_path) / "static" / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        extension = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}[image.format]
+        filename = f"{uuid4().hex}{extension}"
+        save_path = upload_dir / filename
+
+        # Re-encode the image to avoid saving untrusted original file bytes.
+        try:
+            if image.mode not in ("RGB", "RGBA"):
+                image = image.convert("RGB")
+            image.save(save_path, format=image.format if image.format in ("JPEG", "PNG", "WEBP") else "JPEG")
+        except (OSError, ValueError):
+            save_path.unlink(missing_ok=True)
+            flash("The picture could not be saved. Please try another image.", "danger")
+            return redirect(url_for("profile"))
+
+        old_filename = user.get("profile_picture")
+        users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"profile_picture": filename}}
+        )
+
+        if old_filename and old_filename != filename:
+            old_path = upload_dir / Path(old_filename).name
+            if old_path.is_file():
+                old_path.unlink(missing_ok=True)
+
+        flash("Profile picture updated.", "success")
+        return redirect(url_for("profile"))
+
+    @app.post("/profile/picture/remove")
+    @login_required
+    def remove_profile_picture():
+        user = current_user()
+        if not user:
+            session.clear()
+            flash("Please sign in again.", "warning")
+            return redirect(url_for("login"))
+
+        filename = user.get("profile_picture")
+        users.update_one(
+            {"_id": user["_id"]},
+            {"$unset": {"profile_picture": ""}}
+        )
+
+        if filename:
+            upload_dir = Path(current_app.root_path) / "static" / "uploads"
+            old_path = upload_dir / Path(filename).name
+            if old_path.is_file():
+                old_path.unlink(missing_ok=True)
+
+        flash("Profile picture removed.", "success")
+        return redirect(url_for("profile"))
+
 
     @app.get("/logout")
     def logout():
@@ -168,28 +411,76 @@ def register_web_routes(app, mongo_database, login_required, admin_required, oid
     @login_required
     def donate_blood():
         user = current_user()
+        if not user:
+            session.clear()
+            flash("Please sign in again.", "warning")
+            return redirect(url_for("login"))
+
         if request.method == "POST":
+            fullname = request.form.get("fullname", "").strip()
+            phone = request.form.get("phone", "").strip()
+            group = request.form.get("blood_group", "").strip()
+            gender = request.form.get("gender", "").strip()
+
             try:
                 age = int(request.form.get("age", ""))
-            except ValueError:
+            except (TypeError, ValueError):
                 age = 0
-            group = request.form.get("blood_group", "")
-            gender_choice = request.form.get("gender", "").strip()
-            gender_other = request.form.get("gender_other", "").strip()
+
+            valid_genders = (
+                "Female",
+                "Male",
+                "Other",
+                "Prefer not to say",
+            )
+
+            form_user = {
+                **user,
+                "fullname": fullname,
+                "phone": phone,
+                "blood_group": group,
+                "age": age,
+                "gender": gender,
+            }
+
+            if not fullname:
+                flash("Enter your full name.", "danger")
+                return render_template("donate_blood.html", user=form_user), 400
+
+            if len(fullname) > 120 or len(phone) > 30:
+                flash("Name or phone field is too long.", "danger")
+                return render_template("donate_blood.html", user=form_user), 400
+
             if group not in Config.BLOOD_GROUPS or not 18 <= age <= 65:
-                flash("Choose a valid blood group and enter an age from 18 to 65.", "danger")
-                return render_template("donate_blood.html", user=user), 400
-            if gender_choice not in ("Female", "Male", "Other") or (gender_choice == "Other" and not gender_other):
-                flash("Choose Female, Male, or Other and enter a description for Other.", "danger")
-                return render_template("donate_blood.html", user=user), 400
-            users.update_one({"_id": ObjectId(session["user_id"])}, {"$set": {
-                "fullname": request.form.get("fullname", "").strip(),
-                "phone": request.form.get("phone", "").strip(), "blood_group": group, "age": age,
-                "gender": gender_other if gender_choice == "Other" else gender_choice,
-                "gender_option": gender_choice, "gender_other": gender_other if gender_choice == "Other" else "",
-                "donor": True, "donor_registered_at": datetime.now(timezone.utc)}})
+                flash(
+                    "Choose a valid blood group and enter an age from 18 to 65.",
+                    "danger",
+                )
+                return render_template("donate_blood.html", user=form_user), 400
+
+            if gender not in valid_genders:
+                flash("Please choose a valid gender option.", "danger")
+                return render_template("donate_blood.html", user=form_user), 400
+
+            users.update_one(
+                {"_id": ObjectId(session["user_id"])},
+                {
+                    "$set": {
+                        "fullname": fullname,
+                        "phone": phone,
+                        "blood_group": group,
+                        "age": age,
+                        "gender": gender,
+                        "donor": True,
+                        "donor_registered_at": datetime.now(timezone.utc),
+                    }
+                },
+            )
+
+            session["user"] = fullname
             flash("Donor profile saved.", "success")
             return redirect(url_for("dashboard"))
+
         return render_template("donate_blood.html", user=user)
 
     @app.route("/request_blood", methods=["GET", "POST"])
@@ -255,6 +546,19 @@ def register_web_routes(app, mongo_database, login_required, admin_required, oid
     @admin_required
     def reject_request(id):
         return decide_request(id, "Rejected")
+    @app.post("/delete_request/<id>")
+    @admin_required
+    def delete_request(id):
+        request_id = oid(id)
+        record = requests_col.find_one({"_id": request_id})
+
+        if not record:
+            abort(404)
+
+        requests_col.delete_one({"_id": request_id})
+        flash("Blood request deleted.", "success")
+        return redirect(url_for("view_requests"))
+
 
     @app.get("/hospitals")
     @login_required

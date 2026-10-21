@@ -1,12 +1,29 @@
+# Environment variables and secrets
 .env
+.env.*
+!.env.example
+
+# Python environments and caches
 .venv/
+venv/
 .deps/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 *.log
-ai/model/*.joblib
-ai/data/*.csv
+
+# Local databases and generated data
 instance/
 *.sqlite3
+*.db
+ai/model/*.joblib
+ai/data/*.csv
+
+# User uploads and private images
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Generated archives and backups
 *.zip
+feature-backup-*/
+*-backup/
